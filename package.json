@@ -1,0 +1,13 @@
+{
+  "name": "quiz-engine-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Quiz Engine API implementation contract and repository scaffold.",
+  "engines": {
+    "node": "24.18.0",
+    "npm": ">=11"
+  },
+  "scripts": {
+    "phase0:inventory": "find . -path './.git' -prune -o -type f -print | sort"
+  }
+}
