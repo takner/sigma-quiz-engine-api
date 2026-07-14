@@ -17,6 +17,17 @@ describe('validateEnvironment', () => {
     expect(config.CORS_ORIGINS).toContain('http://localhost:3000');
   });
 
+  it('allows port zero for test environments', () => {
+    const config = validateEnvironment({
+      NODE_ENV: 'test',
+      PORT: '0',
+      DATABASE_URL: 'postgresql://quiz:quiz@localhost:5432/quiz_dev',
+      JWT_SECRET: 'test-secret',
+    });
+
+    expect(config.PORT).toBe(0);
+  });
+
   it('requires explicit CORS origins in production', () => {
     expect(() =>
       validateEnvironment({

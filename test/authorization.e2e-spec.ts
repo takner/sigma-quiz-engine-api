@@ -29,15 +29,6 @@ describe('Authorization', () => {
   let jwt: JwtService;
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.PORT = '0';
-    process.env.DATABASE_URL =
-      process.env.DATABASE_URL ??
-      'postgresql://quiz:quiz@localhost:5432/quiz_dev';
-    process.env.CORS_ORIGINS = 'http://localhost:3000';
-    process.env.JWT_SECRET = 'test-secret';
-    process.env.JWT_EXPIRES_IN = '3600';
-
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule, JwtModule.register({})],
       controllers: [TestAdminOnlyController],

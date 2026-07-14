@@ -23,7 +23,7 @@ export function validateEnvironment(
 
   return {
     NODE_ENV: nodeEnvironment,
-    PORT: parsePort(values.PORT),
+    PORT: parsePort(values.PORT, nodeEnvironment),
     DATABASE_URL: parseDatabaseUrl(values.DATABASE_URL),
     CORS_ORIGINS: corsOrigins,
     JWT_SECRET: parseRequiredString(values.JWT_SECRET, 'JWT_SECRET'),
@@ -47,8 +47,28 @@ function parseNodeEnvironment(value: unknown): NodeEnvironment {
   throw new Error('NODE_ENV must be one of development, test, or production.');
 }
 
-function parsePort(value: unknown): number {
-  const port = parsePositiveInteger(value, 'PORT', 3000);
+function parsePort(value: unknown, nodeEnvironment: NodeEnvironment): number {
+  const rawValue = value ?? 3000;
+  let port: number;
+
+  if (typeof rawValue === 'number') {
+    port = rawValue;
+  } else if (typeof rawValue === 'string' && rawValue.trim().length > 0) {
+    port = Number.parseInt(rawValue, 10);
+  } else {
+    throw new Error('PORT must be a positive integer.');
+  }
+
+  if (!Number.isInteger(port) || port < 0) {
+    throw new Error('PORT must be a positive integer.');
+  }
+
+  if (nodeEnvironment === 'test' && port === 0) {
+    return port;
+  }
+  if (port === 0) {
+    throw new Error('PORT must be a positive integer.');
+  }
   if (port > 65535) {
     throw new Error('PORT must be less than or equal to 65535.');
   }
