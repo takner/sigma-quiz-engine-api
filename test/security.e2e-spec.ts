@@ -56,6 +56,14 @@ describe('Correct-answer response security', () => {
     await app.close();
   });
 
+  it('fails the recursive leakage sentinel when correctOptionIndex is present', () => {
+    expect(() => {
+      expectNoCorrectOptionIndex({
+        nested: [{ correctOptionIndex: 0 }],
+      });
+    }).toThrow();
+  });
+
   it('recursively excludes correctOptionIndex from start and get attempt responses', async () => {
     const quiz = await createPublishedQuiz(
       prisma,

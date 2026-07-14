@@ -102,7 +102,22 @@ describe('Attempts', () => {
         (quiz: { title: string }) => quiz.title === 'Phase4 Archived Catalog',
       ),
     ).toBe(false);
+    expect(Object.keys(list.body).sort()).toEqual(['data', 'pagination']);
+    expect(Object.keys(list.body.pagination).sort()).toEqual([
+      'hasNextPage',
+      'hasPreviousPage',
+      'limit',
+      'page',
+      'totalItems',
+      'totalPages',
+    ]);
     expectNoCorrectOptionIndex(list.body);
+
+    const invalidLimit = await request(app.getHttpServer())
+      .get('/api/v1/quizzes?limit=101')
+      .set('authorization', `Bearer ${user.token}`)
+      .expect(400);
+    expect(invalidLimit.body.error.code).toBe('INVALID_PAGINATION');
 
     const preview = await request(app.getHttpServer())
       .get(`/api/v1/quizzes/${published.id}`)
@@ -264,6 +279,23 @@ describe('Attempts', () => {
     expect(archivedResponse.body.error.code).toBe('QUIZ_ARCHIVED');
   });
 
+  it('denies admins access to user quiz and attempt endpoints', async () => {
+    const quiz = await createPublishedQuiz(
+      prisma,
+      admin.id,
+      'Phase4 Role Boundary',
+    );
+
+    const catalog = await request(app.getHttpServer())
+      .get('/api/v1/quizzes')
+      .set('authorization', `Bearer ${admin.token}`)
+      .expect(403);
+    expect(catalog.body.error.code).toBe('FORBIDDEN');
+
+    const start = await startAttempt(app, admin.token, quiz.id).expect(403);
+    expect(start.body.error.code).toBe('FORBIDDEN');
+  });
+
   it('enforces attempt ownership and UUID path validation', async () => {
     const quiz = await createPublishedQuiz(
       prisma,
@@ -278,6 +310,26 @@ describe('Attempts', () => {
       .set('authorization', `Bearer ${otherUser.token}`)
       .expect(403);
     expect(forbidden.body.error.code).toBe('ATTEMPT_NOT_OWNED');
+
+    const forbiddenSubmit = await submitAttempt(
+      app,
+      otherUser.token,
+      createdAttemptId,
+      {
+        answers: [],
+      },
+    ).expect(403);
+    expect(forbiddenSubmit.body.error.code).toBe('ATTEMPT_NOT_OWNED');
+
+    const missingSubmit = await submitAttempt(
+      app,
+      user.token,
+      '16d07e6a-e8f5-46b8-9d90-4e2700f0e9c4',
+      {
+        answers: [],
+      },
+    ).expect(404);
+    expect(missingSubmit.body.error.code).toBe('ATTEMPT_NOT_FOUND');
 
     const malformed = await request(app.getHttpServer())
       .get('/api/v1/attempts/not-a-uuid')
