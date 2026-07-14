@@ -96,6 +96,7 @@ The following decisions are approved amendments to this PRD:
 16. Error envelopes MUST follow Section 5.6 exactly: `{ statusCode, error: { code, message, details, requestId, timestamp, path } }`. `details` is always an array, possibly empty, and MUST NOT be `null`.
 17. `ROUTE_NOT_FOUND` is the required error code for unknown routes.
 18. Health endpoints are served under the global API prefix: `/api/v1/health/live` and `/api/v1/health/ready`.
+19. Every UUID path parameter MUST be validated at the controller boundary using `ParseUUIDPipe` or an equivalent. Malformed UUID path parameters MUST return HTTP `400` with code `VALIDATION_FAILED` and a field-level `details` entry; they MUST NOT reach Prisma or produce `500 INTERNAL_ERROR`.
 
 # 2. Scope
 

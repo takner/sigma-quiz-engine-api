@@ -129,6 +129,26 @@ describe('Admin quizzes', () => {
       .expect(404);
   });
 
+  it('rejects malformed UUID path parameters at the controller boundary', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/admin/quizzes/not-a-uuid')
+      .set('authorization', `Bearer ${adminToken}`)
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      statusCode: 400,
+      error: {
+        code: 'VALIDATION_FAILED',
+        details: [
+          {
+            field: 'quizId',
+            issue: 'must be a valid UUID',
+          },
+        ],
+      },
+    });
+  });
+
   it('allows an admin to create, update, and delete draft questions', async () => {
     const quiz = await createDraftQuiz('Phase3 Question CRUD');
 

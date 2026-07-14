@@ -72,6 +72,7 @@ If implementation conflicts with the PRD, or a requirement is ambiguous or missi
 
 ## Validation and Access Resolutions
 - Use the exact PRD validation bounds for passwords, quiz fields, questions, options, time limits, and pagination.
+- Validate UUID path parameters at controller boundaries; malformed UUIDs return 400 VALIDATION_FAILED with field-level details.
 - Default ordering: published quizzes by publishedAt DESC, admin quizzes by updatedAt DESC, questions by position ASC, history by startedAt DESC, answer breakdown by snapshot order.
 - `/auth/me` allows any authenticated account.
 - Admin quiz/question management is ADMIN only.
