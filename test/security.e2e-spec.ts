@@ -8,11 +8,13 @@ import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
 import {
+  attemptBody,
   cleanAttemptFixtures,
   createPublishedQuiz,
   createUserAndToken,
   expectNoCorrectOptionIndex,
   startAttempt,
+  submitAttempt,
 } from './support/attempt-test-helpers';
 
 describe('Correct-answer response security', () => {
@@ -62,13 +64,35 @@ describe('Correct-answer response security', () => {
     );
 
     const started = await startAttempt(app, user.token, quiz.id).expect(201);
-    const attemptId = String(started.body.id);
+    const startedBody = attemptBody(started);
     expectNoCorrectOptionIndex(started.body);
 
     const read = await request(app.getHttpServer())
-      .get(`/api/v1/attempts/${attemptId}`)
+      .get(`/api/v1/attempts/${startedBody.id}`)
       .set('authorization', `Bearer ${user.token}`)
       .expect(200);
     expectNoCorrectOptionIndex(read.body);
+
+    const submitted = await submitAttempt(app, user.token, startedBody.id, {
+      answers: [
+        {
+          questionId: startedBody.questions[0]?.id,
+          selectedOptionIndex: 2,
+        },
+      ],
+    }).expect(200);
+    expectNoCorrectOptionIndex(submitted.body);
+
+    const history = await request(app.getHttpServer())
+      .get('/api/v1/users/me/quiz-history')
+      .set('authorization', `Bearer ${user.token}`)
+      .expect(200);
+    expectNoCorrectOptionIndex(history.body);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/v1/users/me/quiz-history/${startedBody.id}`)
+      .set('authorization', `Bearer ${user.token}`)
+      .expect(200);
+    expectNoCorrectOptionIndex(detail.body);
   });
 });

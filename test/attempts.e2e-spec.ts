@@ -8,11 +8,14 @@ import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
 import {
+  attemptBody,
   cleanAttemptFixtures,
   createPublishedQuiz,
   createUserAndToken,
   expectNoCorrectOptionIndex,
   startAttempt,
+  submitAttempt,
+  submittedAttemptBody,
 } from './support/attempt-test-helpers';
 
 describe('Attempts', () => {
@@ -216,9 +219,8 @@ describe('Attempts', () => {
       .expect(200);
 
     expect(expired.body).toMatchObject({
-      id: firstAttemptId,
+      attemptId: firstAttemptId,
       status: 'EXPIRED',
-      questions: [],
     });
 
     const retake = await startAttempt(app, user.token, quiz.id).expect(201);
@@ -290,6 +292,300 @@ describe('Attempts', () => {
         },
       ],
     });
+  });
+
+  it('submits atomically, scores omitted answers, and returns history from snapshots', async () => {
+    const quiz = await createPublishedQuiz(
+      prisma,
+      admin.id,
+      'Phase4 Submit Partial',
+    );
+    const startedResponse = await startAttempt(app, user.token, quiz.id).expect(
+      201,
+    );
+    const started = attemptBody(startedResponse);
+    const firstQuestion = started.questions[0];
+    expect(firstQuestion).toBeDefined();
+
+    const submittedResponse = await submitAttempt(app, user.token, started.id, {
+      answers: [
+        {
+          questionId: firstQuestion.id,
+          selectedOptionIndex: 2,
+        },
+      ],
+    }).expect(200);
+    const submitted = submittedAttemptBody(submittedResponse);
+
+    expect(submitted).toMatchObject({
+      attemptId: started.id,
+      status: 'SUBMITTED',
+      score: {
+        correct: 1,
+        total: 2,
+        percentage: 50,
+      },
+    });
+    expect(submitted.answers).toEqual([
+      {
+        questionId: firstQuestion.id,
+        selectedOptionIndex: 2,
+        answered: true,
+        isCorrect: true,
+      },
+      {
+        questionId: started.questions[1]?.id,
+        selectedOptionIndex: null,
+        answered: false,
+        isCorrect: false,
+      },
+    ]);
+    expectNoCorrectOptionIndex(submittedResponse.body);
+
+    await expect(
+      prisma.attemptAnswer.count({
+        where: { attemptId: started.id },
+      }),
+    ).resolves.toBe(1);
+
+    const getAttempt = await request(app.getHttpServer())
+      .get(`/api/v1/attempts/${started.id}`)
+      .set('authorization', `Bearer ${user.token}`)
+      .expect(200);
+    expect(getAttempt.body).toMatchObject({
+      attemptId: started.id,
+      status: 'SUBMITTED',
+      score: { correct: 1, total: 2, percentage: 50 },
+    });
+    expectNoCorrectOptionIndex(getAttempt.body);
+
+    const history = await request(app.getHttpServer())
+      .get('/api/v1/users/me/quiz-history')
+      .set('authorization', `Bearer ${user.token}`)
+      .expect(200);
+    expect(history.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          attemptId: started.id,
+          quizId: quiz.id,
+          quizTitle: 'Phase4 Submit Partial',
+          status: 'SUBMITTED',
+          score: { correct: 1, total: 2, percentage: 50 },
+        }),
+      ]),
+    );
+    expectNoCorrectOptionIndex(history.body);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/v1/users/me/quiz-history/${started.id}`)
+      .set('authorization', `Bearer ${user.token}`)
+      .expect(200);
+    expect(detail.body).toMatchObject({
+      attemptId: started.id,
+      status: 'SUBMITTED',
+    });
+    expectNoCorrectOptionIndex(detail.body);
+  });
+
+  it('rejects invalid submit payloads and duplicate submit attempts', async () => {
+    const quiz = await createPublishedQuiz(
+      prisma,
+      admin.id,
+      'Phase4 Submit Validation',
+    );
+    const started = attemptBody(
+      await startAttempt(app, user.token, quiz.id).expect(201),
+    );
+    const firstQuestion = started.questions[0];
+    expect(firstQuestion).toBeDefined();
+
+    const duplicate = await submitAttempt(app, user.token, started.id, {
+      answers: [
+        { questionId: firstQuestion.id, selectedOptionIndex: 2 },
+        { questionId: firstQuestion.id, selectedOptionIndex: 1 },
+      ],
+    }).expect(400);
+    expect(duplicate.body.error.code).toBe('DUPLICATE_QUESTION_ANSWER');
+
+    const foreignQuestion = await submitAttempt(app, user.token, started.id, {
+      answers: [
+        {
+          questionId: 'baf6d770-cc2e-46a5-af60-85c2ab2e1249',
+          selectedOptionIndex: 0,
+        },
+      ],
+    }).expect(400);
+    expect(foreignQuestion.body.error.code).toBe('QUESTION_NOT_IN_ATTEMPT');
+
+    const badOption = await submitAttempt(app, user.token, started.id, {
+      answers: [{ questionId: firstQuestion.id, selectedOptionIndex: 99 }],
+    }).expect(400);
+    expect(badOption.body.error.code).toBe('INVALID_SELECTED_OPTION_INDEX');
+
+    await submitAttempt(app, user.token, started.id, {
+      answers: [{ questionId: firstQuestion.id, selectedOptionIndex: 2 }],
+    }).expect(200);
+
+    const duplicateSubmit = await submitAttempt(app, user.token, started.id, {
+      answers: [{ questionId: firstQuestion.id, selectedOptionIndex: 2 }],
+    }).expect(409);
+    expect(duplicateSubmit.body.error.code).toBe('ATTEMPT_ALREADY_SUBMITTED');
+  });
+
+  it('supports idempotent successful submit replay for the same normalized payload', async () => {
+    const quiz = await createPublishedQuiz(
+      prisma,
+      admin.id,
+      'Phase4 Submit Idempotency',
+    );
+    const started = attemptBody(
+      await startAttempt(app, user.token, quiz.id).expect(201),
+    );
+    const firstQuestion = started.questions[0];
+    expect(firstQuestion).toBeDefined();
+    const payload = {
+      answers: [{ questionId: firstQuestion.id, selectedOptionIndex: 2 }],
+    };
+
+    const first = await submitAttempt(app, user.token, started.id, payload)
+      .set('idempotency-key', 'phase4-idempotency-key')
+      .expect(200);
+    const replay = await submitAttempt(app, user.token, started.id, payload)
+      .set('idempotency-key', 'phase4-idempotency-key')
+      .expect(200);
+
+    expect(replay.body).toEqual(first.body);
+
+    const changed = await submitAttempt(app, user.token, started.id, {
+      answers: [{ questionId: firstQuestion.id, selectedOptionIndex: 1 }],
+    })
+      .set('idempotency-key', 'phase4-idempotency-key')
+      .expect(409);
+    expect(changed.body.error.code).toBe('IDEMPOTENCY_KEY_REUSED');
+  });
+
+  it('rejects expired submits and preserves attempts started before archive', async () => {
+    const expiringQuiz = await createPublishedQuiz(
+      prisma,
+      admin.id,
+      'Phase4 Expired Submit',
+      { timeLimitSeconds: 1 },
+    );
+    const expiredAttempt = attemptBody(
+      await startAttempt(app, user.token, expiringQuiz.id).expect(201),
+    );
+    await prisma.quizAttempt.update({
+      where: { id: expiredAttempt.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    const expiredSubmit = await submitAttempt(
+      app,
+      user.token,
+      expiredAttempt.id,
+      {
+        answers: [],
+      },
+    ).expect(409);
+    expect(expiredSubmit.body.error.code).toBe('ATTEMPT_EXPIRED');
+    await expect(
+      prisma.quizAttempt.findUniqueOrThrow({
+        where: { id: expiredAttempt.id },
+      }),
+    ).resolves.toMatchObject({ status: 'EXPIRED' });
+
+    const archivedQuiz = await createPublishedQuiz(
+      prisma,
+      admin.id,
+      'Phase4 Archive After Start',
+    );
+    const archiveAttempt = attemptBody(
+      await startAttempt(app, user.token, archivedQuiz.id).expect(201),
+    );
+    await prisma.quiz.update({
+      where: { id: archivedQuiz.id },
+      data: { status: 'ARCHIVED', archivedAt: new Date() },
+    });
+
+    await submitAttempt(app, user.token, archiveAttempt.id, {
+      answers: [
+        {
+          questionId: archiveAttempt.questions[0]?.id,
+          selectedOptionIndex: 2,
+        },
+      ],
+    }).expect(200);
+  });
+
+  it('allows retakes after submission and records each attempt in history', async () => {
+    const quiz = await createPublishedQuiz(
+      prisma,
+      admin.id,
+      'Phase4 Submitted Retake',
+    );
+    const first = attemptBody(
+      await startAttempt(app, user.token, quiz.id).expect(201),
+    );
+    await submitAttempt(app, user.token, first.id, {
+      answers: [
+        {
+          questionId: first.questions[0]?.id,
+          selectedOptionIndex: 2,
+        },
+      ],
+    }).expect(200);
+
+    const second = attemptBody(
+      await startAttempt(app, user.token, quiz.id).expect(201),
+    );
+    expect(second.id).not.toBe(first.id);
+
+    const history = await request(app.getHttpServer())
+      .get(`/api/v1/users/me/quiz-history?quizId=${quiz.id}`)
+      .set('authorization', `Bearer ${user.token}`)
+      .expect(200);
+    const attemptIds = (history.body.data as { attemptId: string }[]).map(
+      (item) => item.attemptId,
+    );
+    expect(attemptIds).toEqual(expect.arrayContaining([first.id, second.id]));
+  });
+
+  it('permits exactly one concurrent submit state transition', async () => {
+    const quiz = await createPublishedQuiz(
+      prisma,
+      admin.id,
+      'Phase4 Concurrent Submit',
+    );
+    const started = attemptBody(
+      await startAttempt(app, user.token, quiz.id).expect(201),
+    );
+    const answers = {
+      answers: [
+        {
+          questionId: started.questions[0]?.id,
+          selectedOptionIndex: 2,
+        },
+        {
+          questionId: started.questions[1]?.id,
+          selectedOptionIndex: 0,
+        },
+      ],
+    };
+
+    const responses = await Promise.all([
+      submitAttempt(app, user.token, started.id, answers),
+      submitAttempt(app, user.token, started.id, answers),
+    ]);
+    const statuses = responses.map((response) => response.status).sort();
+
+    expect(statuses).toEqual([200, 409]);
+    expect(
+      responses.some(
+        (response) => response.body.error?.code === 'ATTEMPT_ALREADY_SUBMITTED',
+      ),
+    ).toBe(true);
+    await expect(
+      prisma.attemptAnswer.count({ where: { attemptId: started.id } }),
+    ).resolves.toBe(2);
   });
 
   async function expectOpenAttemptCount(

@@ -9,6 +9,34 @@ export type PublishedQuiz = Quiz & {
   questions: Question[];
 };
 
+export interface AttemptQuestionBody {
+  id: string;
+  position: number;
+  questionText: string;
+  options: string[];
+}
+
+export interface AttemptBody {
+  id: string;
+  questions: AttemptQuestionBody[];
+}
+
+export interface SubmittedAttemptBody {
+  attemptId: string;
+  status: 'SUBMITTED';
+  score: {
+    correct: number;
+    total: number;
+    percentage: number;
+  };
+  answers: {
+    questionId: string;
+    selectedOptionIndex: number | null;
+    answered: boolean;
+    isCorrect: boolean;
+  }[];
+}
+
 export async function cleanAttemptFixtures(
   prisma: PrismaService,
 ): Promise<void> {
@@ -153,4 +181,28 @@ export function startAttempt(
   return request(app.getHttpServer())
     .post(`/api/v1/quizzes/${quizId}/attempts`)
     .set('authorization', `Bearer ${token}`);
+}
+
+export function submitAttempt(
+  app: INestApplication,
+  token: string,
+  attemptId: string,
+  body: object,
+): request.Test {
+  return request(app.getHttpServer())
+    .post(`/api/v1/attempts/${attemptId}/submit`)
+    .set('authorization', `Bearer ${token}`)
+    .send(body);
+}
+
+export function attemptBody(response: request.Response): AttemptBody {
+  const body: unknown = response.body;
+  return body as AttemptBody;
+}
+
+export function submittedAttemptBody(
+  response: request.Response,
+): SubmittedAttemptBody {
+  const body: unknown = response.body;
+  return body as SubmittedAttemptBody;
 }
