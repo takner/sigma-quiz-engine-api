@@ -12,11 +12,11 @@ export class HealthController {
   }
 
   @Get('ready')
-  getReadiness(): {
+  async getReadiness(): Promise<{
     status: 'ok';
-    checks: { application: 'ok'; configuration: 'ok' };
+    checks: { database: 'ok' };
     timestamp: string;
-  } {
+  }> {
     return this.healthService.getReadiness();
   }
 }

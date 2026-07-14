@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
 import { validateEnvironment } from './infrastructure/config/env.validation';
+import { DatabaseModule } from './infrastructure/database/database.module';
 import { HealthModule } from './infrastructure/health/health.module';
 
 @Module({
@@ -11,6 +12,7 @@ import { HealthModule } from './infrastructure/health/health.module';
       isGlobal: true,
       validate: validateEnvironment,
     }),
+    DatabaseModule,
     HealthModule,
   ],
 })

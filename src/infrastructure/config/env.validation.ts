@@ -3,7 +3,9 @@ export type NodeEnvironment = 'development' | 'test' | 'production';
 export interface EnvironmentConfig {
   NODE_ENV: NodeEnvironment;
   PORT: number;
+  DATABASE_URL: string;
   CORS_ORIGINS: string[];
+  JWT_SECRET: string;
   JWT_EXPIRES_IN: number;
 }
 
@@ -22,7 +24,9 @@ export function validateEnvironment(
   return {
     NODE_ENV: nodeEnvironment,
     PORT: parsePort(values.PORT),
+    DATABASE_URL: parseDatabaseUrl(values.DATABASE_URL),
     CORS_ORIGINS: corsOrigins,
+    JWT_SECRET: parseRequiredString(values.JWT_SECRET, 'JWT_SECRET'),
     JWT_EXPIRES_IN: parsePositiveInteger(
       values.JWT_EXPIRES_IN,
       'JWT_EXPIRES_IN',
@@ -49,6 +53,22 @@ function parsePort(value: unknown): number {
     throw new Error('PORT must be less than or equal to 65535.');
   }
   return port;
+}
+
+function parseDatabaseUrl(value: unknown): string {
+  const databaseUrl = parseRequiredString(value, 'DATABASE_URL');
+  let parsed: URL;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error('DATABASE_URL must be a valid PostgreSQL URL.');
+  }
+
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error('DATABASE_URL must use the PostgreSQL protocol.');
+  }
+
+  return databaseUrl;
 }
 
 function parseCorsOrigins(
@@ -91,4 +111,12 @@ function parsePositiveInteger(
   }
 
   return parsed;
+}
+
+function parseRequiredString(value: unknown, name: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${name} is required.`);
+  }
+
+  return value.trim();
 }

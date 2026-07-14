@@ -11,7 +11,11 @@ describe('Health and documentation endpoints', () => {
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.PORT = '0';
+    process.env.DATABASE_URL =
+      process.env.DATABASE_URL ??
+      'postgresql://quiz:quiz@localhost:5432/quiz_dev';
     process.env.CORS_ORIGINS = 'http://localhost:3000';
+    process.env.JWT_SECRET = 'test-secret';
     process.env.JWT_EXPIRES_IN = '3600';
 
     const moduleRef = await Test.createTestingModule({
@@ -35,7 +39,7 @@ describe('Health and documentation endpoints', () => {
     expect(response.body.status).toBe('ok');
   });
 
-  it('GET /api/v1/health/ready returns 200 without a database', async () => {
+  it('GET /api/v1/health/ready returns 200 when the database is reachable', async () => {
     const response = await request(app.getHttpServer())
       .get('/api/v1/health/ready')
       .expect(200);
@@ -43,8 +47,7 @@ describe('Health and documentation endpoints', () => {
     expect(response.body).toMatchObject({
       status: 'ok',
       checks: {
-        application: 'ok',
-        configuration: 'ok',
+        database: 'ok',
       },
     });
   });
@@ -102,5 +105,40 @@ describe('Health and documentation endpoints', () => {
 
     expect(response.body.openapi).toMatch(/^3\./);
     expect(response.body.info.title).toBe('Quiz Engine API');
+  });
+
+  it('GET /api/v1/health/ready returns 503 when the database is unreachable', async () => {
+    const previousDatabaseUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = 'postgresql://quiz:quiz@127.0.0.1:5999/quiz_dev';
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    const unavailableDbApp = moduleRef.createNestApplication();
+    configureApplication(unavailableDbApp);
+    await unavailableDbApp.init();
+
+    try {
+      const response = await request(unavailableDbApp.getHttpServer())
+        .get('/api/v1/health/ready')
+        .expect(503);
+
+      expect(response.body).toMatchObject({
+        statusCode: 503,
+        error: {
+          code: 'SERVICE_NOT_READY',
+          message: 'Database connection is not ready.',
+          details: [],
+          path: '/api/v1/health/ready',
+        },
+      });
+    } finally {
+      await unavailableDbApp.close();
+      if (previousDatabaseUrl === undefined) {
+        delete process.env.DATABASE_URL;
+      } else {
+        process.env.DATABASE_URL = previousDatabaseUrl;
+      }
+    }
   });
 });
