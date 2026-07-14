@@ -138,6 +138,32 @@ describe('Health and documentation endpoints', () => {
       '/api/v1/attempts/{attemptId}/submit',
     );
     expect(response.body.paths).toHaveProperty('/api/v1/users/me/quiz-history');
+    expect(
+      response.body.paths['/api/v1/admin/quizzes'].post.description,
+    ).toContain('Role: ADMIN');
+    expect(response.body.paths['/api/v1/quizzes'].get.description).toContain(
+      'Role: USER',
+    );
+    expect(response.body.paths['/api/v1/auth/me'].get.security).toStrictEqual([
+      { bearer: [] },
+    ]);
+    expect(
+      response.body.paths['/api/v1/admin/quizzes'].post.security,
+    ).toStrictEqual([{ bearer: [] }]);
+    expect(
+      response.body.paths['/api/v1/admin/quizzes'].post.responses,
+    ).toHaveProperty('403');
+    expect(
+      response.body.paths['/api/v1/attempts/{attemptId}/submit'].post.responses,
+    ).toHaveProperty('409');
+    expect(
+      response.body.paths['/api/v1/attempts/{attemptId}/submit'].post
+        .parameters,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'idempotency-key', in: 'header' }),
+      ]),
+    );
   });
 
   it('GET /api/v1/health/ready returns 503 when the database is unreachable', async () => {
