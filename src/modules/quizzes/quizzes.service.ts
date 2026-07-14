@@ -34,6 +34,14 @@ interface AdminQuestionResponse {
   correctOptionIndex: number;
 }
 
+interface UserQuizResponse {
+  id: string;
+  title: string;
+  description: string | null;
+  questionCount: number;
+  timeLimitSeconds: number | null;
+}
+
 type QuizWithCount = Quiz & {
   _count: {
     questions: number;
@@ -141,6 +149,76 @@ export class QuizzesService {
     }
 
     return this.toAdminQuizDetailResponse(quiz);
+  }
+
+  async listAvailableQuizzes(query: {
+    page?: string;
+    limit?: string;
+  }): Promise<PaginatedResponse<UserQuizResponse>> {
+    const pagination = parsePagination(query);
+    const where: Prisma.QuizWhereInput = {
+      status: QuizStatus.PUBLISHED,
+    };
+
+    const [items, totalItems] = await this.prisma.$transaction([
+      this.prisma.quiz.findMany({
+        where,
+        orderBy: { publishedAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.limit,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          timeLimitSeconds: true,
+          _count: {
+            select: { questions: true },
+          },
+        },
+      }),
+      this.prisma.quiz.count({ where }),
+    ]);
+
+    return paginate(
+      items.map((quiz) => ({
+        id: quiz.id,
+        title: quiz.title,
+        description: quiz.description,
+        timeLimitSeconds: quiz.timeLimitSeconds,
+        questionCount: quiz._count.questions,
+      })),
+      totalItems,
+      pagination,
+    );
+  }
+
+  async getAvailableQuizPreview(quizId: string): Promise<UserQuizResponse> {
+    const quiz = await this.prisma.quiz.findFirst({
+      where: {
+        id: quizId,
+        status: QuizStatus.PUBLISHED,
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        timeLimitSeconds: true,
+        _count: {
+          select: { questions: true },
+        },
+      },
+    });
+    if (!quiz) {
+      throwQuizNotFound();
+    }
+
+    return {
+      id: quiz.id,
+      title: quiz.title,
+      description: quiz.description,
+      timeLimitSeconds: quiz.timeLimitSeconds,
+      questionCount: quiz._count.questions,
+    };
   }
 
   async updateQuiz(
