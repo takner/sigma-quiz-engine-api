@@ -7,13 +7,14 @@ FROM node:24.18.0-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN npx prisma generate && npm run build
 
 FROM node:24.18.0-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
-RUN npm ci --omit=dev
+COPY prisma ./prisma
+RUN npm ci --include=dev && npx prisma generate
 COPY --from=build /app/dist ./dist
 EXPOSE 3000
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npm run seed && node dist/main.js"]

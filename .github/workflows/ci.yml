@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: quiz
+          POSTGRES_PASSWORD: quiz
+          POSTGRES_DB: quiz_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quiz -d quiz_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      PORT: 0
+      DATABASE_URL: postgresql://quiz:quiz@localhost:5432/quiz_dev
+      CORS_ORIGINS: http://localhost:3000
+      JWT_SECRET: ci-test-secret
+      JWT_EXPIRES_IN: 3600
+      SEED_ADMIN_EMAIL: admin@example.com
+      SEED_ADMIN_PASSWORD: AdminDemoPass123!
+      SEED_USER_EMAIL: user@example.com
+      SEED_USER_PASSWORD: UserDemoPass123!
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Seed demo data
+        run: npm run seed
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build

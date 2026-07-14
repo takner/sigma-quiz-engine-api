@@ -38,14 +38,16 @@ DATABASE_URL=postgresql://quiz:quiz@localhost:5432/quiz_dev
 CORS_ORIGINS=http://localhost:3000
 JWT_SECRET=local-development-secret-at-least-32-chars
 JWT_EXPIRES_IN=3600
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=AdminPass123!
+SEED_ADMIN_EMAIL=admin@example.com
+SEED_ADMIN_PASSWORD=AdminDemoPass123!
+SEED_USER_EMAIL=user@example.com
+SEED_USER_PASSWORD=UserDemoPass123!
 ```
 
 Demo credentials created by the seed script are development-only:
 
-- Admin: `admin@example.com` / `AdminPass123!`
-- User: `user@example.com` / `UserPass123!`
+- Admin: `admin@example.com` / `AdminDemoPass123!`
+- User: `user@example.com` / `UserDemoPass123!`
 
 Do not use these credentials or secrets outside local development and demo containers.
 
