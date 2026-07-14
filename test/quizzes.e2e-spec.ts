@@ -225,6 +225,110 @@ describe('Admin quizzes', () => {
     );
   });
 
+  it('rejects publishing a quiz with zero questions', async () => {
+    const quiz = await createDraftQuiz('Phase3 Empty Publish');
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/admin/quizzes/${quiz.id}/publish`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .expect(409);
+
+    expect(response.body.error.code).toBe('QUIZ_HAS_NO_QUESTIONS');
+  });
+
+  it('publishes transactionally and makes quiz content immutable', async () => {
+    const quiz = await createDraftQuiz('Phase3 Publish Immutable');
+    const question = await createQuestion(quiz.id);
+
+    const published = await request(app.getHttpServer())
+      .post(`/api/v1/admin/quizzes/${quiz.id}/publish`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(published.body).toMatchObject({
+      id: quiz.id,
+      status: 'PUBLISHED',
+    });
+    expect(Date.parse(String(published.body.publishedAt))).not.toBeNaN();
+
+    const updateQuiz = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/quizzes/${quiz.id}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({
+        title: 'Phase3 Mutated Published',
+      })
+      .expect(409);
+
+    expect(updateQuiz.body.error.code).toBe('PUBLISHED_QUIZ_IMMUTABLE');
+
+    const addQuestion = await request(app.getHttpServer())
+      .post(`/api/v1/admin/quizzes/${quiz.id}/questions`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({
+        position: 2,
+        questionText: 'Which mutation is rejected?',
+        options: ['Create', 'Publish'],
+        correctOptionIndex: 0,
+      })
+      .expect(409);
+
+    expect(addQuestion.body.error.code).toBe('PUBLISHED_QUIZ_IMMUTABLE');
+
+    const updateQuestion = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/quizzes/${quiz.id}/questions/${question.id}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({
+        questionText: 'Should not change',
+      })
+      .expect(409);
+
+    expect(updateQuestion.body.error.code).toBe('PUBLISHED_QUIZ_IMMUTABLE');
+
+    const deleteQuestion = await request(app.getHttpServer())
+      .delete(`/api/v1/admin/quizzes/${quiz.id}/questions/${question.id}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .expect(409);
+
+    expect(deleteQuestion.body.error.code).toBe('PUBLISHED_QUIZ_IMMUTABLE');
+
+    const deleteQuiz = await request(app.getHttpServer())
+      .delete(`/api/v1/admin/quizzes/${quiz.id}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .expect(409);
+
+    expect(deleteQuiz.body.error.code).toBe('QUIZ_DELETE_NOT_ALLOWED');
+  });
+
+  it('archives a quiz and rejects archived content edits', async () => {
+    const quiz = await createDraftQuiz('Phase3 Archive');
+    await createQuestion(quiz.id);
+    await request(app.getHttpServer())
+      .post(`/api/v1/admin/quizzes/${quiz.id}/publish`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const archived = await request(app.getHttpServer())
+      .post(`/api/v1/admin/quizzes/${quiz.id}/archive`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(archived.body).toMatchObject({
+      id: quiz.id,
+      status: 'ARCHIVED',
+    });
+    expect(Date.parse(String(archived.body.archivedAt))).not.toBeNaN();
+
+    const update = await request(app.getHttpServer())
+      .patch(`/api/v1/admin/quizzes/${quiz.id}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({
+        title: 'Phase3 Archived Mutation',
+      })
+      .expect(409);
+
+    expect(update.body.error.code).toBe('PUBLISHED_QUIZ_IMMUTABLE');
+  });
+
   it('denies USER access to admin quiz endpoints', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/admin/quizzes')
@@ -268,6 +372,21 @@ describe('Admin quizzes', () => {
       .send({
         title,
         description: 'Question test quiz',
+      })
+      .expect(201);
+
+    return { id: String(response.body.id) };
+  }
+
+  async function createQuestion(quizId: string): Promise<{ id: string }> {
+    const response = await request(app.getHttpServer())
+      .post(`/api/v1/admin/quizzes/${quizId}/questions`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({
+        position: 1,
+        questionText: 'Which status code means Not Found?',
+        options: ['200', '201', '404', '500'],
+        correctOptionIndex: 2,
       })
       .expect(201);
 

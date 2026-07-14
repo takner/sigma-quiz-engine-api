@@ -200,6 +200,99 @@ export class QuizzesService {
     });
   }
 
+  async publishQuiz(quizId: string): Promise<AdminQuizResponse> {
+    return this.prisma.$transaction(async (tx) => {
+      const quiz = await tx.quiz.findUnique({
+        where: { id: quizId },
+        include: {
+          questions: {
+            orderBy: { position: 'asc' },
+          },
+        },
+      });
+      if (!quiz) {
+        throwQuizNotFound();
+      }
+      if (quiz.status === QuizStatus.ARCHIVED) {
+        throw new ApplicationException(
+          HttpStatus.CONFLICT,
+          'QUIZ_ARCHIVED',
+          'Archived quizzes cannot be published.',
+        );
+      }
+      if (quiz.status === QuizStatus.PUBLISHED) {
+        throw new ApplicationException(
+          HttpStatus.CONFLICT,
+          'PUBLISHED_QUIZ_IMMUTABLE',
+          'Published quiz content cannot be modified.',
+        );
+      }
+      if (quiz.questions.length === 0) {
+        throw new ApplicationException(
+          HttpStatus.CONFLICT,
+          'QUIZ_HAS_NO_QUESTIONS',
+          'Quiz cannot be published without questions.',
+        );
+      }
+
+      for (const question of quiz.questions) {
+        normalizeQuestionInput({
+          position: question.position,
+          questionText: question.questionText,
+          options: jsonOptionsToStrings(question.options),
+          correctOptionIndex: question.correctOptionIndex,
+        });
+      }
+
+      const published = await tx.quiz.update({
+        where: { id: quizId },
+        data: {
+          status: QuizStatus.PUBLISHED,
+          publishedAt: new Date(),
+        },
+        include: {
+          _count: {
+            select: { questions: true },
+          },
+        },
+      });
+
+      return this.toAdminQuizResponse(published);
+    });
+  }
+
+  async archiveQuiz(quizId: string): Promise<AdminQuizResponse> {
+    const quiz = await this.prisma.quiz.findUnique({
+      where: { id: quizId },
+      include: {
+        _count: {
+          select: { questions: true },
+        },
+      },
+    });
+    if (!quiz) {
+      throwQuizNotFound();
+    }
+    if (quiz.status === QuizStatus.ARCHIVED) {
+      return this.toAdminQuizResponse(quiz);
+    }
+
+    const archived = await this.prisma.quiz.update({
+      where: { id: quizId },
+      data: {
+        status: QuizStatus.ARCHIVED,
+        archivedAt: new Date(),
+      },
+      include: {
+        _count: {
+          select: { questions: true },
+        },
+      },
+    });
+
+    return this.toAdminQuizResponse(archived);
+  }
+
   async createQuestion(
     quizId: string,
     dto: CreateQuestionDto,

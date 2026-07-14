@@ -76,6 +76,18 @@ export class QuizzesController {
     return this.quizzes.createQuestion(quizId, body);
   }
 
+  @Post(':quizId/publish')
+  @HttpCode(200)
+  async publishQuiz(@Param('quizId') quizId: string): Promise<unknown> {
+    return this.quizzes.publishQuiz(quizId);
+  }
+
+  @Post(':quizId/archive')
+  @HttpCode(200)
+  async archiveQuiz(@Param('quizId') quizId: string): Promise<unknown> {
+    return this.quizzes.archiveQuiz(quizId);
+  }
+
   @Patch(':quizId/questions/:questionId')
   async updateQuestion(
     @Param('quizId') quizId: string,
