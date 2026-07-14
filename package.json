@@ -17,7 +17,7 @@
     "start": "node dist/main.js",
     "start:dev": "ts-node -r tsconfig-paths/register src/main.ts",
     "test": "jest --runInBand --testPathIgnorePatterns=/test/",
-    "test:e2e": "jest --runInBand --setupFiles=./test/e2e-env.setup.ts --testRegex=test/.*\\.e2e-spec\\.ts$",
+    "test:e2e": "node scripts/run-e2e-tests.js",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
