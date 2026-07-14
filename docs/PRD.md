@@ -93,6 +93,9 @@ The following decisions are approved amendments to this PRD:
 13. `Idempotency-Key` is optional and applies only to attempt submission. Its scope is the authenticated user. A replay with the same normalized request payload MUST return the stored successful response with HTTP `200`; reuse with a different normalized request payload MUST return `409 IDEMPOTENCY_KEY_REUSED`. Idempotency handling and submission MUST participate in the same transaction.
 14. `prisma migrate reset --force` MUST NOT run during Phase 0. In later phases, destructive reset helpers may run only when `NODE_ENV=development`, the database host is `localhost`, `127.0.0.1`, or the approved local Docker service `postgres`, and the database name is clearly development-specific. CI MUST use migration deployment against its disposable PostgreSQL service container.
 15. Node.js 24 LTS MUST be pinned consistently in `.nvmrc`, `package.json` engines, Dockerfile, and GitHub Actions. Do not mix Node major versions across environments.
+16. Error envelopes MUST follow Section 5.6 exactly: `{ statusCode, error: { code, message, details, requestId, timestamp, path } }`. `details` is always an array, possibly empty, and MUST NOT be `null`.
+17. `ROUTE_NOT_FOUND` is the required error code for unknown routes.
+18. Health endpoints are served under the global API prefix: `/api/v1/health/live` and `/api/v1/health/ready`.
 
 # 2. Scope
 
@@ -638,8 +641,8 @@ Validation errors MUST put field-level information in `details`:
 | ATT-03 | POST | `/api/v1/attempts/:attemptId/submit` | Owner USER | 200 |
 | HIST-01 | GET | `/api/v1/users/me/quiz-history` | USER | 200 |
 | HIST-02 | GET | `/api/v1/users/me/quiz-history/:attemptId` | Owner USER | 200 |
-| OPS-01 | GET | `/health/live` | Public | 200 |
-| OPS-02 | GET | `/health/ready` | Public | 200 or 503 |
+| OPS-01 | GET | `/api/v1/health/live` | Public | 200 |
+| OPS-02 | GET | `/api/v1/health/ready` | Public | 200 or 503 |
 
 ## 6.2 AUTH-01 — Register
 
@@ -1053,9 +1056,9 @@ Only the attempt owner may access the result. Submitted attempts return the full
 
 ## 6.22 Health Endpoints
 
-`GET /health/live` confirms the process is running and MUST NOT require the database.
+`GET /api/v1/health/live` confirms the process is running and MUST NOT require the database.
 
-`GET /health/ready` MUST check database connectivity and return `503` if the API cannot safely serve requests.
+`GET /api/v1/health/ready` MUST check database connectivity and return `503` if the API cannot safely serve requests once database integration exists. During Phase 1 only, readiness MAY report application/configuration readiness without a database connection; Phase 2 MUST restore the PostgreSQL connectivity check per BR-48.
 
 # 7. Business Rules
 
@@ -1151,6 +1154,7 @@ Only the attempt owner may access the result. Submitted attempts return the full
 | 401 | INVALID_CREDENTIALS | Login failed |
 | 403 | FORBIDDEN | Role is insufficient |
 | 403 | ATTEMPT_NOT_OWNED | Attempt belongs to another user |
+| 404 | ROUTE_NOT_FOUND | Requested route does not exist |
 | 404 | USER_NOT_FOUND | User does not exist |
 | 404 | QUIZ_NOT_FOUND | Quiz does not exist |
 | 404 | QUESTION_NOT_FOUND | Question does not exist |
@@ -1254,8 +1258,8 @@ The release MUST NOT be declared complete until these acceptance tests pass.
 - **AT-31:** All errors use the common error envelope and request ID.
 - **AT-32:** Pagination contract is exact and validates limits.
 - **AT-33:** Swagger includes auth, roles, requests, success responses, and errors.
-- **AT-34:** `GET /health/live` succeeds without database access.
-- **AT-35:** `GET /health/ready` reports database failure with 503.
+- **AT-34:** `GET /api/v1/health/live` succeeds without database access.
+- **AT-35:** `GET /api/v1/health/ready` reports database failure with 503.
 - **AT-36:** Docker Compose starts API and PostgreSQL from a clean checkout.
 - **AT-37:** CI runs lint, typecheck, unit tests, E2E tests, and build successfully against a PostgreSQL service container.
 

@@ -57,13 +57,15 @@ describe('Health and documentation endpoints', () => {
 
     expect(response.body).toMatchObject({
       statusCode: 404,
-      code: 'ROUTE_NOT_FOUND',
-      message: 'Route not found.',
-      details: null,
-      requestId: 'request-id',
-      path: '/api/v1/unknown',
+      error: {
+        code: 'ROUTE_NOT_FOUND',
+        message: 'Route not found.',
+        details: [],
+        requestId: 'request-id',
+        path: '/api/v1/unknown',
+      },
     });
-    expect(Date.parse(String(response.body.timestamp))).not.toBeNaN();
+    expect(Date.parse(String(response.body.error.timestamp))).not.toBeNaN();
   });
 
   it('returns a valid client-provided request ID in headers and error envelope', async () => {
@@ -73,7 +75,7 @@ describe('Health and documentation endpoints', () => {
       .expect(404);
 
     expect(response.headers['x-request-id']).toBe('req_test_123');
-    expect(response.body.requestId).toBe('req_test_123');
+    expect(response.body.error.requestId).toBe('req_test_123');
   });
 
   it('generates a request ID when none is supplied', async () => {
@@ -84,7 +86,9 @@ describe('Health and documentation endpoints', () => {
     expect(response.headers['x-request-id']).toEqual(
       expect.stringMatching(/^req_/),
     );
-    expect(response.body.requestId).toBe(response.headers['x-request-id']);
+    expect(response.body.error.requestId).toBe(
+      response.headers['x-request-id'],
+    );
   });
 
   it('GET /api/docs is available', async () => {

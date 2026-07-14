@@ -32,8 +32,10 @@ If implementation conflicts with the PRD, or a requirement is ambiguous or missi
 - Dates: UTC ISO 8601.
 - IDs: UUID.
 - Lists use the PRD pagination envelope.
-- Errors use the PRD error envelope.
+- Errors use the nested PRD error envelope: `{ statusCode, error: { code, message, details, requestId, timestamp, path } }`.
+- Error `details` is always an array, possibly empty, never null.
 - Scores use `{ correct, total, percentage }`.
+- Health endpoints are `/api/v1/health/live` and `/api/v1/health/ready`.
 
 ## Security Invariants
 - Public registration always creates USER.

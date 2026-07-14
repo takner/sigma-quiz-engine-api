@@ -35,12 +35,14 @@ export class HttpErrorFilter implements ExceptionFilter {
 
     response.status(normalized.statusCode).json({
       statusCode: normalized.statusCode,
-      code: normalized.code,
-      message: normalized.message,
-      details: normalized.details,
-      requestId: request.requestId,
-      timestamp: new Date().toISOString(),
-      path: request.originalUrl || request.url,
+      error: {
+        code: normalized.code,
+        message: normalized.message,
+        details: normalized.details,
+        requestId: request.requestId,
+        timestamp: new Date().toISOString(),
+        path: request.originalUrl || request.url,
+      },
     });
   }
 
@@ -48,7 +50,7 @@ export class HttpErrorFilter implements ExceptionFilter {
     statusCode: number;
     code: ErrorCode;
     message: string;
-    details: ErrorDetail[] | null;
+    details: ErrorDetail[];
   } {
     if (exception instanceof ApplicationException) {
       return {
@@ -66,7 +68,7 @@ export class HttpErrorFilter implements ExceptionFilter {
           statusCode,
           code: 'ROUTE_NOT_FOUND',
           message: 'Route not found.',
-          details: null,
+          details: [],
         };
       }
 
@@ -80,7 +82,7 @@ export class HttpErrorFilter implements ExceptionFilter {
         message:
           bodyObject?.message ??
           (typeof body === 'string' ? body : exception.message),
-        details: bodyObject?.details ?? null,
+        details: bodyObject?.details ?? [],
       };
     }
 
