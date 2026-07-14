@@ -294,6 +294,23 @@ describe('Attempts', () => {
     });
   });
 
+  it('rejects malformed UUID query parameters before Prisma receives them', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/users/me/quiz-history?quizId=not-a-uuid')
+      .set('authorization', `Bearer ${user.token}`)
+      .expect(400);
+
+    expect(response.body.error).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      details: [
+        {
+          field: 'quizId',
+          issue: 'must be a valid UUID',
+        },
+      ],
+    });
+  });
+
   it('submits atomically, scores omitted answers, and returns history from snapshots', async () => {
     const quiz = await createPublishedQuiz(
       prisma,

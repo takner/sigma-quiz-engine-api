@@ -17,6 +17,7 @@ import { CurrentUser } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
 import { Roles } from '../../common/auth/roles.decorator';
 import { RolesGuard } from '../../common/auth/roles.guard';
+import { OptionalUuidQueryPipe } from '../../common/pipes/optional-uuid-query.pipe';
 import { UuidParamPipe } from '../../common/pipes/uuid-param.pipe';
 import { AttemptsService } from './attempts.service';
 import { SubmitAttemptDto } from './dto/submit-attempt.dto';
@@ -66,10 +67,17 @@ export class AttemptsController {
   @Get('users/me/quiz-history')
   async listHistory(
     @CurrentUser() user: AuthenticatedUser,
-    @Query()
-    query: { page?: string; limit?: string; quizId?: string; status?: string },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('quizId', OptionalUuidQueryPipe) quizId?: string,
+    @Query('status') status?: string,
   ): Promise<unknown> {
-    return this.attempts.listHistory(user.id, query);
+    return this.attempts.listHistory(user.id, {
+      page,
+      limit,
+      quizId,
+      status,
+    });
   }
 
   @Get('users/me/quiz-history/:attemptId')

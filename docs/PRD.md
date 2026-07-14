@@ -97,6 +97,7 @@ The following decisions are approved amendments to this PRD:
 17. `ROUTE_NOT_FOUND` is the required error code for unknown routes.
 18. Health endpoints are served under the global API prefix: `/api/v1/health/live` and `/api/v1/health/ready`.
 19. Every UUID path parameter MUST be validated at the controller boundary using `ParseUUIDPipe` or an equivalent. Malformed UUID path parameters MUST return HTTP `400` with code `VALIDATION_FAILED` and a field-level `details` entry; they MUST NOT reach Prisma or produce `500 INTERNAL_ERROR`.
+20. Resolution 19 extends to UUID-shaped query parameters. The `quizId` filter on `GET /api/v1/users/me/quiz-history` MUST reject malformed values with HTTP `400`, code `VALIDATION_FAILED`, and a field-level `details` entry. All query parameters MUST be audited for this class of Prisma-bound malformed input before release.
 
 # 2. Scope
 
