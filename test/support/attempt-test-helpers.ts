@@ -105,7 +105,7 @@ export async function createUserAndToken(
       role: user.role,
     },
     {
-      secret: 'test-secret',
+      secret: process.env.JWT_SECRET,
       expiresIn: 3600,
     },
   );
